@@ -1,4 +1,4 @@
-name: macOS 10.15
+name: macOS 14
 
 on:
   pull_request:
@@ -9,12 +9,12 @@ on:
 
 env:
   DEBIAN_FRONTEND: noninteractive
-  OPENCV_VERSION: 4.8.0
+  OPENCV_VERSION: 4.11.0
 
 jobs:
   build:
 
-    runs-on: macos-11
+    runs-on: macos-14
     
     steps:
       - uses: actions/checkout@v3
@@ -106,7 +106,7 @@ jobs:
       - name: Install .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '6.0.x'
+          dotnet-version: '9.0.x'
 
       - name: Create NuGet package
         env: 
@@ -114,22 +114,22 @@ jobs:
         run: |
           yyyymmdd=`date '+%Y%m%d'`
           echo $yyyymmdd
-          sed -E -i=.bak "s/<version>[0-9]\.[0-9]{1,2}\.[0-9]{1,2}.[0-9]{8}(-beta[0-9]*)?<\/version>/<version>${OPENCV_VERSION}.${yyyymmdd}${BETA}<\/version>/" ${GITHUB_WORKSPACE}/nuget/OpenCvSharp4.runtime.osx.10.15-x64.nuspec
-          cat ${GITHUB_WORKSPACE}/nuget/OpenCvSharp4.runtime.osx.10.15-x64.nuspec
-          dotnet pack ${GITHUB_WORKSPACE}/nuget/OpenCvSharp4.runtime.osx.10.15-x64.csproj -o ${GITHUB_WORKSPACE}/artifacts_macos
+          sed -E -i=.bak "s/<version>[0-9]\.[0-9]{1,2}\.[0-9]{1,2}.[0-9]{8}(-beta[0-9]*)?<\/version>/<version>${OPENCV_VERSION}.${yyyymmdd}${BETA}<\/version>/" ${GITHUB_WORKSPACE}/nuget/OpenCvSharp4.runtime.osx.14-x64.nuspec
+          cat ${GITHUB_WORKSPACE}/nuget/OpenCvSharp4.runtime.osx.14-x64.nuspec
+          dotnet pack ${GITHUB_WORKSPACE}/nuget/OpenCvSharp4.runtime.osx.14-x64.csproj -o ${GITHUB_WORKSPACE}/artifacts_macos
           ls ${GITHUB_WORKSPACE}/artifacts_macos       
        
       - uses: actions/upload-artifact@v3
         with:
-          name: artifacts_macos_10
+          name: artifacts_macos_14
           path: artifacts_macos
 
       - name: Test
         run: |
           cd ${GITHUB_WORKSPACE}/test/OpenCvSharp.Tests
           # ls
-          dotnet build -c Release -f net6.0
-          cp ${GITHUB_WORKSPACE}/nuget/libOpenCvSharpExtern.dylib ${GITHUB_WORKSPACE}/test/OpenCvSharp.Tests/bin/Release/net6.0/
+          dotnet build -c Release -f net9.0
+          cp ${GITHUB_WORKSPACE}/nuget/libOpenCvSharpExtern.dylib ${GITHUB_WORKSPACE}/test/OpenCvSharp.Tests/bin/Release/net9.0/
           cp ${GITHUB_WORKSPACE}/nuget/libOpenCvSharpExtern.dylib ${GITHUB_WORKSPACE}/test/OpenCvSharp.Tests/
           # ls ${GITHUB_WORKSPACE}/test/OpenCvSharp.Tests/bin/Release/net6.0/
           # ls
@@ -141,5 +141,5 @@ jobs:
 
       - uses: actions/upload-artifact@v1
         with:
-          name: artifacts_macos_10_test_results
+          name: artifacts_macos_14_test_results
           path: test/OpenCvSharp.Tests/TestResults/test-results.trx
