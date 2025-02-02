@@ -132,14 +132,14 @@ jobs:
 
           # Use a here-doc to generate test.c without needing to escape quotes
           cat <<'EOF' > test.c
-#include <stdio.h>
-int core_Mat_sizeof();
-int main(){
-    int i = core_Mat_sizeof();
-    printf("sizeof(Mat) = %d\n", i);
-    return 0;
-}
-EOF
+          #include <stdio.h>
+          int core_Mat_sizeof();
+          int main(){
+              int i = core_Mat_sizeof();
+              printf("sizeof(Mat) = %d\n", i);
+              return 0;
+          }
+          EOF
           gcc -I./ -L./ test.c -o test -lOpenCvSharpExtern
 
           # Set DYLD_LIBRARY_PATH so the dynamic linker can find our .dylib
