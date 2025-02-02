@@ -15,7 +15,7 @@ env:
 
 jobs:
   build:
-    # macOS 14 runner; be aware that GH may still give you an Intel machine
+    # macOS 14 runner; be aware GitHub may still give you an Intel-based machine
     runs-on: macos-14
 
     steps:
@@ -28,7 +28,7 @@ jobs:
           brew update
           brew install wget pkg-config mono-libgdiplus gtk+ ffmpeg@4 glog yasm harfbuzz jpeg libpng libtiff openjpeg metis openblas opencore-amr protobuf tbb webp freetype
 
-      # Uncomment the lines below if you want a cache step for opencv
+      # If you want to cache OpenCV builds, uncomment:
       # - name: Cache OpenCV
       #   id: opencv-cache
       #   uses: actions/cache@v3
@@ -37,9 +37,10 @@ jobs:
       #     key: opencv-${{ env.OPENCV_VERSION }}-macos-rev1
 
       - name: Build OpenCV
-        # If using a cache, optionally do: if: steps.opencv-cache.outputs.cache-hit != 'true'
+        # Uncomment if using cache: if: steps.opencv-cache.outputs.cache-hit != 'true'
         run: |
           pwd
+          # Download and unzip OpenCV 4.10.0 + opencv_contrib 4.10.0
           wget https://github.com/opencv/opencv/archive/${OPENCV_VERSION}.zip -Oopencv-${OPENCV_VERSION}.zip
           unzip opencv-${OPENCV_VERSION}.zip
           wget https://github.com/opencv/opencv_contrib/archive/${OPENCV_VERSION}.zip -Oopencv_contrib-${OPENCV_VERSION}.zip
@@ -48,6 +49,7 @@ jobs:
           cd opencv-${OPENCV_VERSION}
           mkdir build && cd build
 
+          # Configure OpenCV
           cmake \
             -DCMAKE_BUILD_TYPE=Release \
             -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib-${OPENCV_VERSION}/modules \
@@ -103,11 +105,13 @@ jobs:
           pwd
           mkdir -p src/build
           cd src/build
+
           cmake \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH=${{ github.workspace }}/opencv_macos \
             -DCMAKE_OSX_ARCHITECTURES=${{ env.CMAKE_OSX_ARCHITECTURES }} \
             ..
+
           make -j2
 
           ls
@@ -121,10 +125,11 @@ jobs:
           otool -L libOpenCvSharpExtern.dylib
           nm libOpenCvSharpExtern.dylib
 
+          # Properly escape the internal quotes and newline
           echo -ne "#include <stdio.h>\nint core_Mat_sizeof(); int main(){ int i=core_Mat_sizeof(); printf(\"sizeof(Mat) = %d\\n\", i); return 0; }" > test.c
           gcc -I./ -L./ test.c -o test -lOpenCvSharpExtern
 
-          # macOS uses DYLD_LIBRARY_PATH
+          # macOS uses DYLD_LIBRARY_PATH to find .dylibs
           export DYLD_LIBRARY_PATH=.
           ./test
 
@@ -165,7 +170,7 @@ jobs:
           # Copy native library into test output
           cp $GITHUB_WORKSPACE/nuget/libOpenCvSharpExtern.dylib bin/Release/net9.0/
 
-          # Set up DYLD_LIBRARY_PATH for macOS
+          # Use DYLD_LIBRARY_PATH so the test runner can find libOpenCvSharpExtern.dylib
           export DYLD_LIBRARY_PATH=bin/Release/net9.0
 
           dotnet test OpenCvSharp.Tests.csproj \
