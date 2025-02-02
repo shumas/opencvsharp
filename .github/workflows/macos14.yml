@@ -28,7 +28,7 @@ jobs:
           brew update
           brew install wget pkg-config mono-libgdiplus gtk+ ffmpeg@4 glog yasm harfbuzz jpeg libpng libtiff openjpeg metis openblas opencore-amr protobuf tbb webp freetype
 
-      # If you want to cache OpenCV builds, uncomment:
+      # If you want to cache OpenCV builds, uncomment the following:
       # - name: Cache OpenCV
       #   id: opencv-cache
       #   uses: actions/cache@v3
@@ -37,20 +37,19 @@ jobs:
       #     key: opencv-${{ env.OPENCV_VERSION }}-macos-rev1
 
       - name: Build OpenCV
-        # Uncomment if using cache: if: steps.opencv-cache.outputs.cache-hit != 'true'
         run: |
           pwd
-          # Download and unzip OpenCV 4.10.0 + opencv_contrib 4.10.0
-          wget https://github.com/opencv/opencv/archive/${OPENCV_VERSION}.zip -Oopencv-${OPENCV_VERSION}.zip
+          # Download and unzip OpenCV 4.10.0 and opencv_contrib 4.10.0
+          wget https://github.com/opencv/opencv/archive/${OPENCV_VERSION}.zip -O opencv-${OPENCV_VERSION}.zip
           unzip opencv-${OPENCV_VERSION}.zip
-          wget https://github.com/opencv/opencv_contrib/archive/${OPENCV_VERSION}.zip -Oopencv_contrib-${OPENCV_VERSION}.zip
+          wget https://github.com/opencv/opencv_contrib/archive/${OPENCV_VERSION}.zip -O opencv_contrib-${OPENCV_VERSION}.zip
           unzip opencv_contrib-${OPENCV_VERSION}.zip
 
           cd opencv-${OPENCV_VERSION}
-          mkdir -p build
-          cd build
+          # Create build directory (no trailing space) and move into it
+          mkdir -p build && cd build
 
-          # Configure OpenCV
+          # Configure OpenCV with CMake
           cmake \
             -DCMAKE_BUILD_TYPE=Release \
             -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib-${OPENCV_VERSION}/modules \
@@ -90,12 +89,11 @@ jobs:
             -DWITH_EIGEN=OFF \
             -DWITH_ADE=OFF \
             -DWITH_OPENEXR=OFF \
-            -DWITH_ORBBEC=OFF \            
+            -DWITH_ORBBEC=OFF \
             -DOPENCV_ENABLE_NONFREE=ON \
             -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/opencv_macos \
             -DCMAKE_OSX_ARCHITECTURES=${{ env.CMAKE_OSX_ARCHITECTURES }} \
             ..
-
           make -j2
           make install
 
@@ -114,7 +112,6 @@ jobs:
             -DWITH_ORBBEC=OFF \
             -DCMAKE_OSX_ARCHITECTURES=${{ env.CMAKE_OSX_ARCHITECTURES }} \
             ..
-
           make -j2
 
           ls
@@ -122,26 +119,30 @@ jobs:
 
           cp OpenCvSharpExtern/libOpenCvSharpExtern.dylib $GITHUB_WORKSPACE/nuget/
 
+      - name: Patch Orbbec Dependency (if not needed)
+        run: |
+          cd $GITHUB_WORKSPACE/nuget/
+          # Remove dependency on libOrbbecSDK.1.9.dylib by patching the install name.
+          install_name_tool -change @loader_path/libOrbbecSDK.1.9.dylib /dev/null libOpenCvSharpExtern.dylib
+
       - name: Check OpenCvSharpExtern
         run: |
           cd $GITHUB_WORKSPACE/nuget/
           otool -L libOpenCvSharpExtern.dylib
-          nm libOpenCvSharpExtern.dylib > /dev/null 2>&1 || true
 
           # Use a here-doc to generate test.c without needing to escape quotes
           cat <<'EOF' > test.c
-          #include <stdio.h>
-          int core_Mat_sizeof();
-          int main(){
-              int i = core_Mat_sizeof();
-              printf("sizeof(Mat) = %d\n", i);
-              return 0;
-          }
-          EOF
-          
+#include <stdio.h>
+int core_Mat_sizeof();
+int main(){
+    int i = core_Mat_sizeof();
+    printf("sizeof(Mat) = %d\n", i);
+    return 0;
+}
+EOF
           gcc -I./ -L./ test.c -o test -lOpenCvSharpExtern
 
-          # macOS uses DYLD_LIBRARY_PATH to find .dylibs
+          # Set DYLD_LIBRARY_PATH so the dynamic linker can find our .dylib
           export DYLD_LIBRARY_PATH=.
           ./test
 
@@ -150,7 +151,7 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
-      - name: Create NuGet package
+      - name: Create NuGet Package
         env:
           BETA: ""
         run: |
@@ -174,15 +175,15 @@ jobs:
           name: artifacts_macos_14_arm64
           path: artifacts_macos
 
-      - name: Test
+      - name: Test Managed Code
         run: |
           cd $GITHUB_WORKSPACE/test/OpenCvSharp.Tests
           dotnet build -c Release -f net9.0
 
-          # Copy native library into test output
+          # Copy the native library into the test output folder
           cp $GITHUB_WORKSPACE/nuget/libOpenCvSharpExtern.dylib bin/Release/net9.0/
 
-          # Use DYLD_LIBRARY_PATH so the test runner can find libOpenCvSharpExtern.dylib
+          # Set DYLD_LIBRARY_PATH so that the test runner can load the native library
           export DYLD_LIBRARY_PATH=bin/Release/net9.0
 
           dotnet test OpenCvSharp.Tests.csproj \
