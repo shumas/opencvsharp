@@ -1,4 +1,4 @@
-name: macOS 14
+name: Build OpenCvSharp for macOS 14 (Arm64, .NET 9.0)
 
 on:
   pull_request:
@@ -10,40 +10,50 @@ on:
 env:
   DEBIAN_FRONTEND: noninteractive
   OPENCV_VERSION: 4.11.0
+  # Force an arm64 build if the runner is actually an Apple Silicon machine
+  CMAKE_OSX_ARCHITECTURES: arm64
 
 jobs:
   build:
-
+    # macOS 14 runner; be aware that GH may still give you an Intel machine
     runs-on: macos-14
-    
+
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 1
-      
-      - name: Install build dependencies
-        run: | 
-          brew install wget pkg-config mono-libgdiplus gtk+ ffmpeg@4 glog yasm harfbuzz jpeg libpng libtiff openjpeg metis openblas opencore-amr protobuf tbb webp # openexr
 
-#      - name: Cache OpenCV
-#        id: opencv-cache
-#        uses: actions/cache@v3
-#        with:
-#          path: ${{ github.workspace }}/opencv_macos/
-#          key: opencv-${{ env.OPENCV_VERSION }}-macos-rev1
+      - name: Install build dependencies
+        run: |
+          brew update
+          brew install wget pkg-config mono-libgdiplus gtk+ ffmpeg@4 glog yasm harfbuzz jpeg libpng libtiff openjpeg metis openblas opencore-amr protobuf tbb webp freetype
+
+      # Uncomment the lines below if you want a cache step for opencv
+      # - name: Cache OpenCV
+      #   id: opencv-cache
+      #   uses: actions/cache@v3
+      #   with:
+      #     path: ${{ github.workspace }}/opencv_macos
+      #     key: opencv-${{ env.OPENCV_VERSION }}-macos-rev1
 
       - name: Build OpenCV
-        if: steps.opencv-cache.outputs.cache-hit != 'true'
+        # If using a cache, optionally do: if: steps.opencv-cache.outputs.cache-hit != 'true'
         run: |
           pwd
-          wget https://github.com/opencv/opencv/archive/${OPENCV_VERSION}.zip -Oopencv-${OPENCV_VERSION}.zip && unzip opencv-${OPENCV_VERSION}.zip
-          wget https://github.com/opencv/opencv_contrib/archive/${OPENCV_VERSION}.zip -Oopencv_contrib-${OPENCV_VERSION}.zip && unzip opencv_contrib-${OPENCV_VERSION}.zip
-          cd opencv-${OPENCV_VERSION} && mkdir build && cd build
+          wget https://github.com/opencv/opencv/archive/${OPENCV_VERSION}.zip -Oopencv-${OPENCV_VERSION}.zip
+          unzip opencv-${OPENCV_VERSION}.zip
+          wget https://github.com/opencv/opencv_contrib/archive/${OPENCV_VERSION}.zip -Oopencv_contrib-${OPENCV_VERSION}.zip
+          unzip opencv_contrib-${OPENCV_VERSION}.zip
+
+          cd opencv-${OPENCV_VERSION}
+          mkdir build && cd build
+
           cmake \
             -DCMAKE_BUILD_TYPE=Release \
             -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib-${OPENCV_VERSION}/modules \
             -DBUILD_SHARED_LIBS=OFF \
-            -DENABLE_CXX11=ON -DBUILD_TESTS=OFF \
+            -DENABLE_CXX11=ON \
+            -DBUILD_TESTS=OFF \
             -DBUILD_PERF_TESTS=OFF \
             -DBUILD_DOCS=OFF \
             -DBUILD_EXAMPLES=OFF \
@@ -78,68 +88,96 @@ jobs:
             -DWITH_ADE=OFF \
             -DWITH_OPENEXR=OFF \
             -DOPENCV_ENABLE_NONFREE=ON \
-            -DCMAKE_INSTALL_PREFIX=${GITHUB_WORKSPACE}/opencv_macos ..
+            -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/opencv_macos \
+            -DCMAKE_OSX_ARCHITECTURES=${{ env.CMAKE_OSX_ARCHITECTURES }} \
+            ..
+
           make -j2
           make install
-          cd ${GITHUB_WORKSPACE}
+
+          cd $GITHUB_WORKSPACE
           ls
-       
+
       - name: Build OpenCvSharpExtern
         run: |
           pwd
-          mkdir src/build && cd $_
-          cmake -DCMAKE_BUILD_TYPE=Release -D CMAKE_PREFIX_PATH=${GITHUB_WORKSPACE}/opencv_macos ..
+          mkdir -p src/build
+          cd src/build
+          cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH=${{ github.workspace }}/opencv_macos \
+            -DCMAKE_OSX_ARCHITECTURES=${{ env.CMAKE_OSX_ARCHITECTURES }} \
+            ..
           make -j2
-          ls 
+
+          ls
           ls OpenCvSharpExtern
-          cp OpenCvSharpExtern/libOpenCvSharpExtern.dylib ${GITHUB_WORKSPACE}/nuget/
+
+          cp OpenCvSharpExtern/libOpenCvSharpExtern.dylib $GITHUB_WORKSPACE/nuget/
 
       - name: Check OpenCvSharpExtern
         run: |
-          cd ${GITHUB_WORKSPACE}/nuget/
+          cd $GITHUB_WORKSPACE/nuget/
           otool -L libOpenCvSharpExtern.dylib
           nm libOpenCvSharpExtern.dylib
-          echo -ne "#include <stdio.h> \n int core_Mat_sizeof(); int main(){ int i = core_Mat_sizeof(); printf(\"sizeof(Mat) = %d\", i); return 0; }" > test.c
-          gcc -I./ -L./ test.c -o test -lOpenCvSharpExtern
-          LD_LIBRARY_PATH=. ./test
 
-      - name: Install .NET
+          echo -ne "#include <stdio.h>\nint core_Mat_sizeof(); int main(){ int i=core_Mat_sizeof(); printf(\"sizeof(Mat) = %d\\n\", i); return 0; }" > test.c
+          gcc -I./ -L./ test.c -o test -lOpenCvSharpExtern
+
+          # macOS uses DYLD_LIBRARY_PATH
+          export DYLD_LIBRARY_PATH=.
+          ./test
+
+      - name: Install .NET 9
         uses: actions/setup-dotnet@v3
         with:
           dotnet-version: '9.0.x'
 
       - name: Create NuGet package
-        env: 
+        env:
           BETA: ""
         run: |
-          yyyymmdd=`date '+%Y%m%d'`
-          echo $yyyymmdd
-          sed -E -i=.bak "s/<version>[0-9]\.[0-9]{1,2}\.[0-9]{1,2}.[0-9]{8}(-beta[0-9]*)?<\/version>/<version>${OPENCV_VERSION}.${yyyymmdd}${BETA}<\/version>/" ${GITHUB_WORKSPACE}/nuget/OpenCvSharp4.runtime.osx.14-x64.nuspec
-          cat ${GITHUB_WORKSPACE}/nuget/OpenCvSharp4.runtime.osx.14-x64.nuspec
-          dotnet pack ${GITHUB_WORKSPACE}/nuget/OpenCvSharp4.runtime.osx.14-x64.csproj -o ${GITHUB_WORKSPACE}/artifacts_macos
-          ls ${GITHUB_WORKSPACE}/artifacts_macos       
-       
-      - uses: actions/upload-artifact@v3
+          yyyymmdd=$(date '+%Y%m%d')
+          echo "Date: $yyyymmdd"
+
+          sed -E -i.bak \
+            "s/<version>[0-9]+\.[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{8}(-beta[0-9]*)?<\/version>/<version>${OPENCV_VERSION}.${yyyymmdd}${BETA}<\/version>/" \
+            $GITHUB_WORKSPACE/nuget/OpenCvSharp4.runtime.osx.14-arm64.nuspec
+
+          cat $GITHUB_WORKSPACE/nuget/OpenCvSharp4.runtime.osx.14-arm64.nuspec
+
+          dotnet pack \
+            $GITHUB_WORKSPACE/nuget/OpenCvSharp4.runtime.osx.14-arm64.csproj \
+            -o $GITHUB_WORKSPACE/artifacts_macos
+
+          ls $GITHUB_WORKSPACE/artifacts_macos
+
+      - uses: actions/upload-artifact@latest
         with:
-          name: artifacts_macos_14
+          name: artifacts_macos_14_arm64
           path: artifacts_macos
 
       - name: Test
         run: |
-          cd ${GITHUB_WORKSPACE}/test/OpenCvSharp.Tests
-          # ls
+          cd $GITHUB_WORKSPACE/test/OpenCvSharp.Tests
           dotnet build -c Release -f net9.0
-          cp ${GITHUB_WORKSPACE}/nuget/libOpenCvSharpExtern.dylib ${GITHUB_WORKSPACE}/test/OpenCvSharp.Tests/bin/Release/net9.0/
-          cp ${GITHUB_WORKSPACE}/nuget/libOpenCvSharpExtern.dylib ${GITHUB_WORKSPACE}/test/OpenCvSharp.Tests/
-          # ls ${GITHUB_WORKSPACE}/test/OpenCvSharp.Tests/bin/Release/net6.0/
-          # ls
-          sudo cp ${GITHUB_WORKSPACE}/nuget/libOpenCvSharpExtern.dylib /usr/local/lib/
-          LD_LIBRARY_PATH=. 
-          dotnet test OpenCvSharp.Tests.csproj -c Release -f net6.0 --runtime osx-x64 --logger "trx;LogFileName=test-results.trx" < /dev/null
+
+          # Copy native library into test output
+          cp $GITHUB_WORKSPACE/nuget/libOpenCvSharpExtern.dylib bin/Release/net9.0/
+
+          # Set up DYLD_LIBRARY_PATH for macOS
+          export DYLD_LIBRARY_PATH=bin/Release/net9.0
+
+          dotnet test OpenCvSharp.Tests.csproj \
+            -c Release \
+            -f net9.0 \
+            --runtime osx-arm64 \
+            --logger "trx;LogFileName=test-results.trx" < /dev/null
+
           ls
           ls TestResults
 
-      - uses: actions/upload-artifact@v1
+      - uses: actions/upload-artifact@latest
         with:
           name: artifacts_macos_14_test_results
           path: test/OpenCvSharp.Tests/TestResults/test-results.trx
