@@ -9,7 +9,7 @@ on:
 
 env:
   DEBIAN_FRONTEND: noninteractive
-  OPENCV_VERSION: 4.11.0
+  OPENCV_VERSION: 4.10.0
   # Force an arm64 build if the runner is actually an Apple Silicon machine
   CMAKE_OSX_ARCHITECTURES: arm64
 
