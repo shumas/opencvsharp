@@ -152,7 +152,7 @@ jobs:
 
           ls $GITHUB_WORKSPACE/artifacts_macos
 
-      - uses: actions/upload-artifact@latest
+      - uses: actions/upload-artifact@v4
         with:
           name: artifacts_macos_14_arm64
           path: artifacts_macos
@@ -177,7 +177,7 @@ jobs:
           ls
           ls TestResults
 
-      - uses: actions/upload-artifact@latest
+      - uses: actions/upload-artifact@v4
         with:
           name: artifacts_macos_14_test_results
           path: test/OpenCvSharp.Tests/TestResults/test-results.trx
