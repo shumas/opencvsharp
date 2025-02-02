@@ -47,7 +47,8 @@ jobs:
           unzip opencv_contrib-${OPENCV_VERSION}.zip
 
           cd opencv-${OPENCV_VERSION}
-          mkdir build && cd build
+          mkdir -p build
+          cd build
 
           # Configure OpenCV
           cmake \
