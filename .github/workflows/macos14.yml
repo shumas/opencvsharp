@@ -15,20 +15,20 @@ env:
 
 jobs:
   build:
-    # macOS 14 runner; be aware GitHub may still give you an Intel-based machine
     runs-on: macos-14
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v3
         with:
           fetch-depth: 1
 
-      - name: Install build dependencies
+      - name: Install Build Dependencies
         run: |
           brew update
           brew install wget pkg-config mono-libgdiplus gtk+ ffmpeg@4 glog yasm harfbuzz jpeg libpng libtiff openjpeg metis openblas opencore-amr protobuf tbb webp freetype
 
-      # If you want to cache OpenCV builds, uncomment the following:
+      # Optional caching step for OpenCV build:
       # - name: Cache OpenCV
       #   id: opencv-cache
       #   uses: actions/cache@v3
@@ -39,14 +39,14 @@ jobs:
       - name: Build OpenCV
         run: |
           pwd
-          # Download and unzip OpenCV 4.10.0 and opencv_contrib 4.10.0
+          # Download and unzip OpenCV and opencv_contrib 4.10.0
           wget https://github.com/opencv/opencv/archive/${OPENCV_VERSION}.zip -O opencv-${OPENCV_VERSION}.zip
           unzip opencv-${OPENCV_VERSION}.zip
           wget https://github.com/opencv/opencv_contrib/archive/${OPENCV_VERSION}.zip -O opencv_contrib-${OPENCV_VERSION}.zip
           unzip opencv_contrib-${OPENCV_VERSION}.zip
 
           cd opencv-${OPENCV_VERSION}
-          # Create build directory (no trailing space) and move into it
+          # Create build directory (no trailing spaces) and enter it
           mkdir -p build && cd build
 
           # Configure OpenCV with CMake
@@ -119,11 +119,14 @@ jobs:
 
           cp OpenCvSharpExtern/libOpenCvSharpExtern.dylib $GITHUB_WORKSPACE/nuget/
 
-      - name: Patch Orbbec Dependency (if not needed)
+      - name: Create Dummy Orbbec Library (if not needed)
+        # Instead of patching the dependency to /dev/null (which is not a valid library), 
+        # create a minimal dummy library that satisfies the dependency.
         run: |
           cd $GITHUB_WORKSPACE/nuget/
-          # Remove dependency on libOrbbecSDK.1.9.dylib by patching the install name.
-          install_name_tool -change @loader_path/libOrbbecSDK.1.9.dylib /dev/null libOpenCvSharpExtern.dylib
+          echo "void OrbbecDummy() {}" > dummy_orbbec.c
+          clang -dynamiclib -o libOrbbecSDK.1.9.dylib dummy_orbbec.c
+          ls -l libOrbbecSDK.1.9.dylib
 
       - name: Check OpenCvSharpExtern
         run: |
